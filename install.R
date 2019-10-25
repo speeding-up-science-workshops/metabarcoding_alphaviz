@@ -1,0 +1,5 @@
+install.packages("data.table")
+install.packages("ggpubr")
+install.packages("ggsci")
+install.packages("microbiome")
+install.packages("phyloseq")
