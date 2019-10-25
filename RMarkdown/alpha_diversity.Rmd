@@ -1,0 +1,146 @@
+---
+title: "Alpha Diversity Tara Oceans"
+author: "Chris Dean"
+date: "10/24/2019"
+output:
+  html_document: default
+  pdf_document: default
+---
+
+## Introduction
+In this tutorial, we utilize microbiome data collected from the Tara Oceans Exhibition to illustrate community ecology analyses in R. The data can be found on the [Tara Oceans website](http://ocean-microbiome.embl.de/companion.html). This data includes an OTU table, a taxonomy table, and relevant meta data corresponding to the experimental design of this study. This is the data we will utilize throughout the remainder of this tutorial.
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message=FALSE)
+```
+
+## Exploring Tara Oceans Dataset
+
+Let us begin this tutorial by importing the packages we will be using.
+```{r}
+library(data.table)
+library(ggpubr)
+library(ggsci)
+library(microbiome)
+library(phyloseq)
+```
+
+We need to specify the location of our OTU count matrix, taxonomy table, and meta data. These files are in a directory called Inputs.
+```{r}
+otu.tbl <- "../Data/otu.csv"
+tax.tbl <- "../Data/taxa.csv"
+meta.tbl <- "../Data/meta.csv"
+```
+
+We will use a function called *read_phyloseq* to import our data files. This function returns a phyloseq object, which we store in a variable called pseq. This variable will act as a container that we can use to store and access different parts of our data.
+```{r}
+pseq <- read_phyloseq(otu.file = otu.tbl, 
+                      taxonomy.file = tax.tbl, 
+                      metadata.file = meta.tbl, 
+                      type = "simple")
+```
+
+We can view the structure of this container by entering the name of the variable into the console. We see that there are 35,651 OTUs, spread across 139 samples. Our experimental design contains information about three sample variables. Additionally, OTUs were classified across seven taxonomic ranks.
+```{r}
+pseq
+```
+
+One of the first things we may want to explore about this data is species richness and diversity. Species richness can be defined as the number of unique OTUs (or species) present within a sample, while diversity can be defined as the distribution and abundances of species present within a sample. We can do this by using a function called *estimate_richness*.
+```{r}                      
+rich.dt <- estimate_richness(pseq, measures = c("Observed", "Chao1", "Shannon"))
+```
+
+Using the above function, we calculated three richness and diversity metrics: the first, **Observed species richness** -- a measure of the number of unique OTUs; second, **Chao1 richness estimate** -- a measure of richness that takes into account differences in sequencing depth; and **Shannon diversity index** -- a measure of diversity that takes into account richness and abundance. We can view the first few rows of this table by called the *head* function.
+```{r}
+head(rich.dt)
+```
+
+Let us suppose you were interested in looking at the relationship between richness/diversity and the ocean depth layer the samples were collected from. We do not have this information in our richness and diversity table, so let us pull it out from our experimental design table.
+```{r}
+depth <- sample_data(pseq)$Depth
+```
+
+We can use the *cbind* function to add this variable to our richness and diversity table.
+```{r}
+rich.dt <- cbind(rich.dt, depth)
+```
+
+We can check to make sure this data was added by using the *head* function again.
+```{r}
+head(rich.dt)
+```
+
+We can create boxplots to look at the observed species richness as a function of ocean sampling depth. Keep in mind that these values will be heavilly influenced by differences in sequencing depth between samples.
+```{r}
+p1 <- ggplot(rich.dt, aes(x = depth, y = Observed, color = depth)) +
+  geom_boxplot() +
+  scale_color_locuszoom() +
+  xlab("Ocean Depth Layer") +
+  ylab("Observed Richness") +
+  labs(color = "Depth") +
+  theme(
+    panel.background = element_blank(),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "black")
+  )
+p1
+```
+
+To account for differences in sequencing depth, we can recreate these plots using the Chao1 richness estimate.
+```{r}
+p2 <- ggplot(rich.dt, aes(x = depth, y = Chao1, color = depth)) +
+  geom_boxplot() +
+  scale_color_locuszoom() +
+  xlab("Ocean Depth Layer") +
+  ylab("Chao1") +
+  labs(color = "Depth") +
+  theme(
+    panel.background = element_blank(),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "black")
+  )
+p2
+```
+
+To determine if these richness estimates are significantly different between groups, we can utilize a non-paramettric ANOVA, such as a Kruskal-Wallis test and add the result to our plot. We can do this by using the *stat_compare_means* function.
+```{r}
+p2 + stat_compare_means(method = "kruskal.test", paired = FALSE, label.x = 3.2)
+```
+
+
+We can also explore the diversity of each community type using the Shannon diversity index.
+```{r}
+p3 <- ggplot(rich.dt, aes(x = depth, y = Shannon, color = depth)) +
+  geom_boxplot() +
+  scale_color_locuszoom() +
+  xlab("Ocean Depth Layer") +
+  ylab("Shannon Diversity") +
+  labs(color = "Depth") +
+  theme(
+    panel.background = element_blank(),
+    panel.grid.major = element_blank(), 
+    panel.grid.minor = element_blank(),
+    axis.line = element_line(colour = "black")
+  )
+p3
+```
+
+As before, we can run a global hypothesis test to test the null hypothesis that the median Shannon diversity values are the same between groups.
+```{r}
+p3 + stat_compare_means(method = "kruskal.test", paired = FALSE, label.x = 3.2)
+```
+
+
+It could be worth arranging all of these plots into a single graphic. To do this, we can use the *ggarrange* function.
+```{r}
+ggarrange(p1 + theme(axis.title.x=element_blank(), axis.text.x=element_blank()), 
+          p2 + theme(axis.title.x=element_blank(), axis.text.x=element_blank()), 
+          p3,
+          labels = c("A", "B", "C"),
+          common.legend = TRUE,
+          legend = "right",
+          nrow = 3,
+          align = "v")
+```
